@@ -14,29 +14,20 @@ class SensorRestV1(APIView):
         serializer = SensorSerializer(sensors, many=True)
         return Response(serializer.data)
     
-    def post(self, request, format=None):    
-
+    def post(self, request, format=None):
         data = request.data
         if data and (data['value'] == self.EXPERIMENT_START_FREQUENCY):
-            serializer = self.get_sensors_quantity()
-            response = Response(serializer.data)
+            response = self.get_sensors()
         else:
             response = Response(data)
 
         return response
 
-    def get_sensors_quantity(self):
-        # Test
-        data = {
-            'name': 'S1'
-        }
-        serializer = SensorSerializer(data=data)
-        if serializer.is_valid():
-            serializer.save()
-        else:
-            print (serializer.errors)
-
-        return serializer
+    def get_sensors(self):
+        """
+            Stub - Routine to get the active sensors from Raspberry
+        """
+        return self.get(None)
 
 class AccelerationRestV1(APIView):
 
