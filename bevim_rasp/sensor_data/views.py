@@ -1,10 +1,12 @@
 from django.http import HttpResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .models import Acceleration, Sensor, Speed, Amplitude, Frequency
-from .serializers import SensorSerializer, DataSerializer
 from rest_framework import status
 
+from .models import Acceleration, Sensor, Speed, Amplitude, Frequency
+from .utils import RoutineUtils 
+from .serializers import SensorSerializer, DataSerializer
+from .exceptions import RoutineException
 
 class SensorRestV1(APIView):
 
@@ -66,7 +68,11 @@ class ControlRestV1(APIView):
         This method is used to change the frequency of the table
         """
         frequency = request.data['frequency']
+        try:
+            RoutineUtils().set_job_frequency(frequency)
+            status_code = 200
 
-        ##### Send this frequency here to the routine to update the table vibration
+        except RoutineException as exception:
+            status_code = exception.error_code
 
-        return HttpResponse()
+        return HttpResponse(status=status_code)
