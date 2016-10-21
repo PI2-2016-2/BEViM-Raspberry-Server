@@ -4,9 +4,10 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from .models import Acceleration, Sensor, Speed, Amplitude, Frequency
-from .utils import RoutineUtils 
+from . import utils
 from .serializers import SensorSerializer, DataSerializer
 from .exceptions import RoutineException
+
 
 class SensorRestV1(APIView):
 
@@ -69,9 +70,8 @@ class ControlRestV1(APIView):
         """
         frequency = request.data['frequency']
         try:
-            RoutineUtils().set_job_frequency(frequency)
+            utils.set_job_frequency(frequency)
             status_code = 200
-
         except RoutineException as exception:
             status_code = exception.error_code
 
