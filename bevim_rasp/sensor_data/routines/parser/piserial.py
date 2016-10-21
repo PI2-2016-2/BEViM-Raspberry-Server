@@ -36,18 +36,14 @@ class PiSerial:
 
     def data_output_list(self):
         self.data_list = []
-        self.counter = 0
         while True:
-            self.incoming_data  = self.data_output()
-            if self.incoming_data == '-1\r\n':
-                self.counter += 1
-            if self.counter == 2:
-                break;
-            if  len(self.incoming_data) > 20 and len(self.incoming_data) < 100:
-                self.data_list.append(self.incoming_data)
+            self.incoming_data  = (self.data_output()).decode('utf-8')
+            if not self.incoming_data:
+                break
+            self.data_list.append(self.incoming_data)
         self.close_serialcom()
         return self.data_list
 
-    #OBS - Funcao nao sera utilizada
     def data_input(self,data):
-        self.bytes_writen = self.ser.write(data+'\n')
+        data = (data + '\n').encode('utf-8')
+        self.bytes_writen = self.ser.write(data)
