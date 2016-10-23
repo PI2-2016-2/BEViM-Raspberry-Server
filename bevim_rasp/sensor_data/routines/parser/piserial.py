@@ -37,19 +37,21 @@ class PiSerial:
         output = line.decode('utf-8')
         return output
 
-    def data_output_list(self):
+    def data_output_list(self, notify_obj=None):
         self.data_list = []
         i = 0
         while True:
             incoming_data = self.data_output()
-            if i >= 128:
-                incoming_data = ''
             print('\n i = ' + str(i) +  ' - Readed line decoded: ' + incoming_data)
             if not incoming_data:
                 if i > 5:
                     break
             if incoming_data:
                 self.data_list.append(incoming_data)
+            if i is 3:
+                if notify_obj:
+                    notify_obj.notify_started()
+                    notify_obj = None
             i += 1
         self.close_serialcom()
         return self.data_list

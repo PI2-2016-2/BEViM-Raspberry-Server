@@ -1,10 +1,10 @@
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseBadRequest
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
 from .models import Acceleration, Sensor, Speed, Amplitude, Frequency
-from . import utils
+from . import utils, protocol
 from .serializers import SensorSerializer, DataSerializer
 from .exceptions import RoutineException
 
@@ -13,16 +13,15 @@ import time
 
 class SensorRestV1(APIView):
 
-    EXPERIMENT_START_FREQUENCY = '-2'
-
     def get(self, request=None, format=None):
         sensors = Sensor.objects.all()
+        print(sensors)
         serializer = SensorSerializer(sensors, many=True)
         return Response(serializer.data)
 
     def post(self, request, format=None):
         data = request.data
-        if data and (data['value'] == self.EXPERIMENT_START_FREQUENCY):
+        if data and (data['value'] == protocol.GET_AVAILABLE_SENSORS_FLAG):
             response = self.get_sensors_quantity()
         else:
             response = Response(data)
@@ -30,10 +29,8 @@ class SensorRestV1(APIView):
 
     def get_sensors_quantity(self):
         """ Method to consult the table to check the present sensors """
-        get_sensors_thread = utils.CollectData.get_instance().get_sensors()
-        time.sleep(1)  # Waiting a time to the thread start
-        utils.insert_command(self.EXPERIMENT_START_FREQUENCY)
-        get_sensors_thread.join()
+        utils.SerialFacade.get_available_sensors()
+        print('Exiting get_sensors_quantity() method')
         return self.get()
 
 
@@ -69,6 +66,18 @@ class FrequencyRestV1(APIView):
         return Response(serializer.data)
 
 class ControlRestV1(APIView):
+   
+    http_method_names = ['post', 'put']
+ 
+    def put(self, request, format=None):
+        flag = request.data['flag']
+
+        if flag == protocol.STOP_EXPERIMENT_FLAG:
+            utils.SerialFacade.stop_experiment()
+            response = HttpResponse(status=200)
+        else:
+            response = HttpResponseBadRequest()
+        return response
 
     def post(self, request, format=None):
         """
@@ -82,10 +91,7 @@ class ControlRestV1(APIView):
             if job is '1':
                 # If is the first job, set the start experiment flag to true
                 start_experiment = True
-            utils.CollectData.get_instance().collect(job, start_experiment)
-            time.sleep(3) # Waiting a time to the thread start
-            utils.set_job_frequency(frequency, start_experiment)
-
+            utils.SerialFacade.set_frequency(frequency, start_experiment)
             status_code = 200
         except RoutineException as exception:
             status_code = exception.error_code

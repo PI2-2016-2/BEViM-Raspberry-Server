@@ -2,9 +2,10 @@ import os
 import subprocess
 import time
 
-import threading
+from threading import Thread
 from .routines.parser.piserial import PiSerial as Piserial
 
+from . import protocol
 from .exceptions import RoutineException
 from bevim_rasp.settings import BASE_DIR
 
@@ -22,18 +23,6 @@ SUCCESS = 200
 class Parser:
 
     logging.basicConfig(format='%(asctime)s %(message)s', filename='parser.log', level=logging.INFO, datefmt='%d/%m/%Y %I:%M:%S %p')
-
-    def total_sensors(self, data_tuple):
-        self.sensors_list = []
-        for default_data in data_tuple:
-            for unique_data in default_data:
-                for x in xrange(1,8):
-                    self.join = 'S' + str(x)
-                    if unique_data == self.join:
-                        self.temp_data = (x,self.join)
-                        self.sensors_list.append(self.temp_data)
-        return tuple(self.sensors_list)
-
 
     def inserting_sensors(self, sensors):
         logging.info('Verifying Sensors table info')
@@ -57,12 +46,12 @@ class Parser:
             self.brute_data.append(self.temp)
         return self.brute_data
 
-    def inserting_acceleration(self, job, accelerations):
+    def inserting_acceleration(self, accelerations):
         print('Inserting acceleration parser method')
         try:
             with transaction.atomic():
+                print('Saving accelerations:')
                 for acceleration in accelerations:
-                    print('Saving acceleration: ')
                     print(acceleration)
                     sensor = models.Sensor.objects.get(name=acceleration[0])
                     models.Acceleration.objects.create(
@@ -71,66 +60,17 @@ class Parser:
                         y_value=acceleration[2],
                         z_value=acceleration[3],
                         timestamp_ref=acceleration[4],
-                        job_id=job
+                        job_id=1 # REMOVE THIS - JUST TO TEST
                     )
         except Exception as e:
             print('Exception caught while inserting acceleration ')
             raise e
             logging.error(e)
 
-    def inserting_speed(self, data_tuple):
-        logging.info('--> Inserting SPEED Data...')
-        self.cur.executemany("INSERT INTO Speed VALUES(?, ?, ?, ?, ?);", data_tuple)
-        self.con.commit()
-        logging.info('SPEED Data loaded to Database with success!')
+class Routine:
 
-    def inserting_amplitude(self, data_tuple):
-        logging.info('--> Inserting AMPLITUDE Data...')
-        self.cur.executemany("INSERT INTO Amplitude VALUES(?, ?, ?, ?, ?);", data_tuple)
-        self.con.commit()
-        logging.info('AMPLITUDE Data loaded to Database with success!')
-
-    def inserting_frequency(self, data_tuple):
-        logging.info('--> Inserting FREQUENCY Data...')
-        self.cur.executemany("INSERT INTO Frequency VALUES(?, ?, ?, ?, ?);", data_tuple)
-        self.con.commit()
-        logging.info('FREQUENCY Data loaded to Database with success!')
-
-
-class ParseDataThread(threading.Thread):
-
-    def __init__(self, job=None):
-        threading.Thread.__init__(self)
-        self.current_job = job
-
-    def set_current_job(self, job):
-        self.current_job = job
-
-    def run(self):
-        self.parser_routine()
-
-    def parser_routine(self):
-        piserial = Piserial()
-        piserial.open_serialcom()
-
-        parser = Parser()
-        parser.inserting_acceleration(
-            self.current_job,
-            parser.creating_data_tuple(
-                piserial.data_output_list()
-            )
-        )
-
-
-class GetSensorsThread(threading.Thread):
-
-    def __init__(self):
-        threading.Thread.__init__(self)
-
-    def run(self):
-        self.get_sensors_routine()
-
-    def get_sensors_routine(self):
+    @classmethod
+    def get_sensors_routine(cls, notify_obj=None):
 
         piserial = Piserial()
         piserial.open_serialcom()
@@ -138,44 +78,100 @@ class GetSensorsThread(threading.Thread):
         parser = Parser()
         parser.inserting_sensors(
             parser.creating_data_tuple(
-                piserial.data_output_list()))
-
-
-class CollectData:
-
-    instance = None
+                piserial.data_output_list(notify_obj)
+            )
+        )
 
     @classmethod
-    def get_instance(cls):
-        if not cls.instance:
-            cls.instance = CollectData()
-        return cls.instance
+    def parser_routine(cls, notify_obj=None):
+        piserial = Piserial()
+        piserial.open_serialcom()
 
-    def __init__(self):
-        # Start the thread setting the first job
-        self.current_thread = ParseDataThread(1)
+        parser = Parser()
+        parser.inserting_acceleration(
+            parser.creating_data_tuple(
+                piserial.data_output_list(notify_obj)
+            )
+        )
 
-    def collect(self, job, start_experiment=False):
+class SerialFacade:
+    """
+    Interface to receive all collect data from serial port requests
+    """
+
+    class NotifyStartedTool:
+        """
+        Tool to notify if a thread have started
+        """
+        def __init__(self, started=False):
+            self.started = started
+
+        def notify_started(self):
+            print('Notifying that thread have started...')
+            self.started = True
+
+        def notify_not_started(self):
+            print('Notifying that thread have not started...')
+            self.started = False
+
+        def is_started(self):
+            return self.started
+
+        def wait_start(self):
+            print("Waiting for thread start...")
+            while(not self.is_started()):
+                pass
+            #time.sleep(2)
+            print("Thread started, keeping on...")
+
+    @classmethod
+    def stop_experiment(cls):
+        insert_command(protocol.STOP_EXPERIMENT_FLAG)
+
+    @classmethod
+    def set_frequency(cls, frequency, start_experiment):
+        cls.collect_sensors_data(start_experiment)
+        set_job_frequency(frequency, start_experiment)
+
+    @classmethod
+    def collect_sensors_data(cls, start_experiment):
         if start_experiment:
-            print('First Job -> Starting parser thread...')
-            self.current_thread.start()
-        else:
-            print('Changing parser thread to job ' + str(job))
-            self.current_thread.set_current_job(job)
+            notify_obj = cls.NotifyStartedTool()
+            collect_data_thread = Thread(
+                target=Routine.parser_routine,
+                kwargs={'notify_obj': notify_obj}
+            )
+            # Start thread to get sensors
+            collect_data_thread.start()
+            # Waiting for thread start
+            notify_obj.wait_start()
 
-    def get_sensors(self):
-        get_sensors_thread = GetSensorsThread()
+    @classmethod
+    def get_available_sensors(cls):
+        notify_obj = cls.NotifyStartedTool()
+        get_sensors_thread = Thread(
+            target=Routine.get_sensors_routine,
+            kwargs={'notify_obj': notify_obj}
+        )
+
+        # Start thread to get sensors
         get_sensors_thread.start()
-        return get_sensors_thread
+        # Waiting for thread start
+        notify_obj.wait_start()
+        # Sending flag to retrieve sensors to control system
+        insert_command(protocol.GET_AVAILABLE_SENSORS_FLAG)
+        # Waiting get sensors routine save the data to exit main thread
+        get_sensors_thread.join()
+
 
 def insert_command(data, begin_experiment_flag=False):
-    print('\nSending this data to serial port: ' + data)
     piserial = Piserial()
     piserial.open_serialcom()
     if(begin_experiment_flag):
-        print('Start experiment flag setted...')
-        piserial.data_input('-1')
-    time.sleep(0.5)
+        print('Start experiment flag setted. Sending -1 to serial port...')
+        piserial.data_input(protocol.START_EXPERIMENT_FLAG)
+    time.sleep(0.1)
+    print('\nSending this data to serial port: ' + data)
     piserial.data_input(data)
     piserial.close_serialcom()
 
@@ -184,4 +180,5 @@ def set_job_frequency(frequency, first_job=False):
         insert_command(frequency, first_job)
     except RoutineException as e:
         raise e
+
 
