@@ -1,9 +1,9 @@
 import os
 import subprocess
+import time
 
 import threading
 from .routines.parser.piserial import PiSerial as Piserial
-from sensor_data.exceptions import RoutineException
 
 from .exceptions import RoutineException
 from bevim_rasp.settings import BASE_DIR
@@ -46,20 +46,37 @@ class Parser:
 
 
     def creating_data_tuple(self, lines):
+        print("lines\n")
+        print(lines)
         self.brute_data = []
         for line in lines:
             self.temp = line.split(',')
-            for x in range(1,3):
-                self.temp[x] = float(self.temp[x])
+            #for x in range(1,3):
+            #    self.temp[x] = float(self.temp[x])
             self.temp[4] = self.temp[4].replace('\r\n','')
             self.brute_data.append(self.temp)
         return self.brute_data
 
-    def inserting_acceleration(self, data_tuple):
-        logging.info('--> Inserting ACCELERATION Data...')
-        self.cur.executemany("INSERT INTO Acceleration VALUES(?, ?, ?, ?, ?);", data_tuple)
-        self.con.commit()
-        logging.info('ACCELARATION Data loaded to Database with success!')
+    def inserting_acceleration(self, job, accelerations):
+        print('Inserting acceleration parser method')
+        try:
+            with transaction.atomic():
+                for acceleration in accelerations:
+                    print('Saving acceleration: ')
+                    print(acceleration)
+                    sensor = models.Sensor.objects.get(name=acceleration[0])
+                    models.Acceleration.objects.create(
+                        sensor=sensor,
+                        x_value=acceleration[1],
+                        y_value=acceleration[2],
+                        z_value=acceleration[3],
+                        timestamp_ref=acceleration[4],
+                        job_id=job
+                    )
+        except Exception as e:
+            print('Exception caught while inserting acceleration ')
+            raise e
+            logging.error(e)
 
     def inserting_speed(self, data_tuple):
         logging.info('--> Inserting SPEED Data...')
@@ -80,48 +97,85 @@ class Parser:
         logging.info('FREQUENCY Data loaded to Database with success!')
 
 
-class RoutineUtils(threading.Thread):
+class ParseDataThread(threading.Thread):
 
-    def __init__(self, mode=False):
+    def __init__(self, job=None):
         threading.Thread.__init__(self)
-        self.mode = mode
+        self.current_job = job
+
+    def set_current_job(self, job):
+        self.current_job = job
 
     def run(self):
-        if self.mode:
-            # Read data mode
-            self.parser_routine()
-        else:
-            # Get sensors mode
-            self.get_sensors_routine()
+        self.parser_routine()
 
-    def parser_routine():
-
+    def parser_routine(self):
         piserial = Piserial()
         piserial.open_serialcom()
 
         parser = Parser()
         parser.inserting_acceleration(
+            self.current_job,
+            parser.creating_data_tuple(
+                piserial.data_output_list()
+            )
+        )
+
+
+class GetSensorsThread(threading.Thread):
+
+    def __init__(self):
+        threading.Thread.__init__(self)
+
+    def run(self):
+        self.get_sensors_routine()
+
+    def get_sensors_routine(self):
+
+        piserial = Piserial()
+        piserial.open_serialcom()
+
+        parser = Parser()
+        parser.inserting_sensors(
             parser.creating_data_tuple(
                 piserial.data_output_list()))
 
-def get_sensors_routine():
 
-    piserial = Piserial()
-    piserial.open_serialcom()
+class CollectData:
 
-    parser = Parser()
-    parser.inserting_sensors(
-        parser.creating_data_tuple(
-            piserial.data_output_list()))
+    instance = None
+
+    @classmethod
+    def get_instance(cls):
+        if not cls.instance:
+            cls.instance = CollectData()
+        return cls.instance
+
+    def __init__(self):
+        # Start the thread setting the first job
+        self.current_thread = ParseDataThread(1)
+
+    def collect(self, job, start_experiment=False):
+        if start_experiment:
+            print('First Job -> Starting parser thread...')
+            self.current_thread.start()
+        else:
+            print('Changing parser thread to job ' + str(job))
+            self.current_thread.set_current_job(job)
+
+    def get_sensors(self):
+        get_sensors_thread = GetSensorsThread()
+        get_sensors_thread.start()
+        return get_sensors_thread
 
 def insert_command(data, begin_experiment_flag=False):
-    print('DADO QUE VAI PRA PORTA SERIAL:')
-    print(data)
-    print(type(data))
+    print('\nSending this data to serial port: ' + data)
     piserial = Piserial()
     piserial.open_serialcom()
     if(begin_experiment_flag):
+        print('Start experiment flag setted...')
         piserial.data_input('-1')
+    time.sleep(0.5)
     piserial.data_input(data)
     piserial.close_serialcom()
 

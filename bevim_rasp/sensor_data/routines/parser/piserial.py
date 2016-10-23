@@ -1,7 +1,6 @@
 #!/usr/bin/python
 
-import serial
-import _thread as thread
+import serial, time
 import sys
 from sensor_data.exceptions import RoutineException
 
@@ -20,6 +19,7 @@ class PiSerial:
     def open_serialcom(self):
         try:
             self.ser = serial.Serial(self.port, self.baudrate, timeout=self.timeout)
+            print('Serial port open with success!')
         except serial.SerialException as e:
             raise RoutineException(self.FAIL_TO_OPEN, aditional_exception=e)
 
@@ -31,16 +31,26 @@ class PiSerial:
             print('Port closed with success')
 
     def data_output(self):
-        self.output = self.ser.readline()
-        return self.output
+        line = self.ser.readline()
+        print('\nReaded line not decoded: ')
+        print(line)
+        output = line.decode('utf-8')
+        return output
 
     def data_output_list(self):
         self.data_list = []
+        i = 0
         while True:
-            self.incoming_data  = (self.data_output()).decode('utf-8')
-            if not self.incoming_data:
-                break
-            self.data_list.append(self.incoming_data)
+            incoming_data = self.data_output()
+            if i >= 128:
+                incoming_data = ''
+            print('\n i = ' + str(i) +  ' - Readed line decoded: ' + incoming_data)
+            if not incoming_data:
+                if i > 5:
+                    break
+            if incoming_data:
+                self.data_list.append(incoming_data)
+            i += 1
         self.close_serialcom()
         return self.data_list
 

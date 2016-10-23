@@ -8,6 +8,8 @@ from . import utils
 from .serializers import SensorSerializer, DataSerializer
 from .exceptions import RoutineException
 
+import time
+
 
 class SensorRestV1(APIView):
 
@@ -21,7 +23,6 @@ class SensorRestV1(APIView):
     def post(self, request, format=None):
         data = request.data
         if data and (data['value'] == self.EXPERIMENT_START_FREQUENCY):
-            utils.insert_command(self.EXPERIMENT_START_FREQUENCY)
             response = self.get_sensors_quantity()
         else:
             response = Response(data)
@@ -29,7 +30,10 @@ class SensorRestV1(APIView):
 
     def get_sensors_quantity(self):
         """ Method to consult the table to check the present sensors """
-        utils.get_sensors_routine()
+        get_sensors_thread = utils.CollectData.get_instance().get_sensors()
+        time.sleep(1)  # Waiting a time to the thread start
+        utils.insert_command(self.EXPERIMENT_START_FREQUENCY)
+        get_sensors_thread.join()
         return self.get()
 
 
@@ -70,17 +74,18 @@ class ControlRestV1(APIView):
         """
         This method is used to change the frequency of the table
         """
-        print("POST DO REST")
         job = request.data['job']
-        print("job \n")
-        print(job)
+        print("Change frequency service called for Job Nº" + job)
         frequency = request.data['frequency']
         try:
             start_experiment = False
             if job is '1':
                 # If is the first job, set the start experiment flag to true
                 start_experiment = True
+            utils.CollectData.get_instance().collect(job, start_experiment)
+            time.sleep(3) # Waiting a time to the thread start
             utils.set_job_frequency(frequency, start_experiment)
+
             status_code = 200
         except RoutineException as exception:
             status_code = exception.error_code
