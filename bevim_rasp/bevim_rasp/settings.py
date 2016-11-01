@@ -78,11 +78,14 @@ WSGI_APPLICATION = 'bevim_rasp.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'bevim_rasp',
+        'USER': 'root',
+        'PASSWORD': 'bevim',
+        'HOST': 'localhost',   # Or an IP Address that your DB is hosted on
+        'PORT': '',
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/1.9/ref/settings/#auth-password-validators

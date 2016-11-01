@@ -2,7 +2,7 @@
 
 import serial, time
 import sys
-from sensor_data.exceptions import RoutineException
+from .exceptions import RoutineException
 
 class PiSerial:
 
@@ -32,22 +32,30 @@ class PiSerial:
 
     def data_output(self):
         line = self.ser.readline()
-        print('\nReaded line not decoded: ')
-        print(line)
         output = line.decode('utf-8')
         return output
 
-    def data_output_list(self, notify_obj=None):
+    def data_output_list(self, notify_obj=None, save_at_each=False):
         self.data_list = []
         i = 0
         while True:
             incoming_data = self.data_output()
-            print('\n i = ' + str(i) +  ' - Readed line decoded: ' + incoming_data)
+            splitted = incoming_data.split(',')
+            if incoming_data and (4 <= len(splitted)):
+                timestamp = float(splitted[4])
+                if timestamp >= 20000:
+                    break
+
+            print('i = ' + str(i) +  ' - Readed line decoded: ' + incoming_data)
             if not incoming_data:
                 if i > 5:
                     break
+
             if incoming_data:
                 self.data_list.append(incoming_data)
+                if save_at_each:
+                    SerialFacade.save_data_from_serial(incoming_data)
+
             if i is 3:
                 if notify_obj:
                     notify_obj.notify_started()

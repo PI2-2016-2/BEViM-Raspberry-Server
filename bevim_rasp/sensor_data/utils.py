@@ -1,9 +1,9 @@
 import os
 import subprocess
-import time
+import serial, sys, time
 
-from threading import Thread
-from .routines.parser.piserial import PiSerial as Piserial
+from threading import Thread, current_thread
+from concurrent.futures import ThreadPoolExecutor
 
 from . import protocol
 from .exceptions import RoutineException
@@ -35,8 +35,6 @@ class Parser:
 
 
     def creating_data_tuple(self, lines):
-        print("lines\n")
-        print(lines)
         self.brute_data = []
         for line in lines:
             self.temp = line.split(',')
@@ -51,7 +49,9 @@ class Parser:
         try:
             with transaction.atomic():
                 print('Saving accelerations:')
+                i = 0
                 for acceleration in accelerations:
+                    print('Saving acceleration ' + str(i))
                     print(acceleration)
                     sensor = models.Sensor.objects.get(name=acceleration[0])
                     models.Acceleration.objects.create(
@@ -62,19 +62,97 @@ class Parser:
                         timestamp_ref=acceleration[4],
                         job_id=1 # REMOVE THIS - JUST TO TEST
                     )
+                    i += 1
         except Exception as e:
             print('Exception caught while inserting acceleration ')
+            print(type(e))
+            print(e)
             raise e
             logging.error(e)
 
+
+class PiSerial:
+
+    FAIL_TO_OPEN = 500
+
+    def __init__(self):
+        self.initialization()
+
+    def initialization(self):
+        self.port = '/dev/ttyACM0'
+        self.baudrate = 9600
+        self.timeout = 1
+
+    def open_serialcom(self):
+        try:
+            self.ser = serial.Serial(self.port, self.baudrate, timeout=self.timeout)
+            print('Serial port open with success!')
+        except serial.SerialException as e:
+            raise RoutineException(self.FAIL_TO_OPEN, aditional_exception=e)
+
+    def close_serialcom(self):
+        self.ser.close()
+        if self.ser.isOpen():
+            print('Error in closing the port. Maybe something is stuck?')
+        else:
+            print('Port closed with success')
+
+    def data_output(self):
+        line = self.ser.readline()
+        output = line.decode('utf-8')
+        return output
+
+    def data_output_list(self, notify_obj=None, save_at_each=False):
+        self.data_list = []
+        i = 0
+        while True:
+            incoming_data = self.data_output()
+            splitted = incoming_data.split(',')
+            if incoming_data:
+                if 4 < len(splitted):
+                    try:
+                        timestamp = float(splitted[4])
+                        if timestamp >= 20000:
+                            break
+                    except Exception as e:
+                        print(e)
+
+            print('i = ' + str(i) +  ' - Readed line decoded: ' + incoming_data)
+            if not incoming_data:
+                if i > 5:
+                    break
+
+            if incoming_data:
+                self.data_list.append(incoming_data)
+                if save_at_each:
+                    SerialFacade.save_data_from_serial(incoming_data)
+
+            if i is 3:
+                if notify_obj:
+                    notify_obj.notify_started()
+                    notify_obj = None
+            i += 1
+        #self.close_serialcom()
+        return self.data_list
+
+    def data_input(self,data):
+        data = (data + '\n').encode('utf-8')
+        self.bytes_writen = self.ser.write(data)
+
+
 class Routine:
 
+    def with_serial_open(function):
+        def decorator(*args, **kwargs):
+            piserial = PiSerial()
+            piserial.open_serialcom()
+            kwargs['piserial'] = piserial
+            function(*args, **kwargs)
+        return decorator
+
     @classmethod
-    def get_sensors_routine(cls, notify_obj=None):
-
-        piserial = Piserial()
-        piserial.open_serialcom()
-
+    @with_serial_open
+    def get_sensors_routine(cls, notify_obj=None, piserial=None):
         parser = Parser()
         parser.inserting_sensors(
             parser.creating_data_tuple(
@@ -83,16 +161,45 @@ class Routine:
         )
 
     @classmethod
-    def parser_routine(cls, notify_obj=None):
-        piserial = Piserial()
-        piserial.open_serialcom()
+    @with_serial_open
+    def parser_routine(cls, notify_obj=None, piserial=None):
+        # parser = Parser()
+        # parser.inserting_acceleration(
+            # parser.creating_data_tuple(
+        piserial.data_output_list(notify_obj, True)
+            # )
+        # )
 
+    @classmethod
+    @with_serial_open
+    def parse_at_each_routine(cls, data, piserial=None):
+        print('\t Thread -> ' + current_thread().name)
         parser = Parser()
         parser.inserting_acceleration(
-            parser.creating_data_tuple(
-                piserial.data_output_list(notify_obj)
-            )
+            parser.creating_data_tuple([data])
         )
+
+
+class SaveSensorDataPool():
+    """
+        Singleton class to manage the pool of threads to save sensor data
+    """
+
+    MAX_THREADS = 8
+    instance = None
+
+    @classmethod
+    def get_instance(cls):
+        if not cls.instance:
+            cls.instance = SaveSensorDataPool()
+        return cls.instance
+
+    def __init__(self):
+        self.executor = ThreadPoolExecutor(max_workers=self.MAX_THREADS)
+
+    def save(self, data):
+        self.executor.submit(Routine.parse_at_each_routine, data)
+
 
 class SerialFacade:
     """
@@ -163,9 +270,12 @@ class SerialFacade:
         # Waiting get sensors routine save the data to exit main thread
         get_sensors_thread.join()
 
+    @classmethod
+    def save_data_from_serial(cls, data):
+        SaveSensorDataPool.get_instance().save(data)
 
 def insert_command(data, begin_experiment_flag=False):
-    piserial = Piserial()
+    piserial = PiSerial()
     piserial.open_serialcom()
     if(begin_experiment_flag):
         print('Start experiment flag setted. Sending -1 to serial port...')
@@ -180,5 +290,3 @@ def set_job_frequency(frequency, first_job=False):
         insert_command(frequency, first_job)
     except RoutineException as e:
         raise e
-
-

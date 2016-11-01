@@ -8,7 +8,7 @@ from . import utils, protocol
 from .serializers import SensorSerializer, DataSerializer
 from .exceptions import RoutineException
 
-import time
+import time, datetime
 
 
 class SensorRestV1(APIView):
@@ -68,18 +68,32 @@ class FrequencyRestV1(APIView):
 class ControlRestV1(APIView):
    
     http_method_names = ['post', 'put']
+    start_time = 0
+    end_time = 0
  
     def put(self, request, format=None):
+        
+        self.end_time = datetime.datetime.now().time()
+        print("START TIME:")
+        print(self.start_time)
+
+        print("END TIME:")
+        print(self.end_time)
+
         flag = request.data['flag']
 
         if flag == protocol.STOP_EXPERIMENT_FLAG:
-            utils.SerialFacade.stop_experiment()
+            #utils.SerialFacade.stop_experiment() # UNCOMMENT THIS - JUST FOR TEST WHILE THE SIMULATION IS NOT RIGHT
             response = HttpResponse(status=200)
         else:
             response = HttpResponseBadRequest()
         return response
 
     def post(self, request, format=None):
+        print("ON CHANGE FREQUENCY POST")
+        self.start_time = datetime.datetime.now().time()
+        print(self.start_time)
+        time.sleep(3)
         """
         This method is used to change the frequency of the table
         """
