@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Sensor, Data
+from .models import Sensor, Acceleration, Frequency
 
 
 class SensorSerializer(serializers.ModelSerializer):
@@ -8,9 +8,18 @@ class SensorSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class DataSerializer(serializers.ModelSerializer):
+class AccelerationSerializer(serializers.ModelSerializer):
     sensor = SensorSerializer()
 
     class Meta:
-        model = Data
+        model = Acceleration
         fields = '__all__'
+
+
+class FrequencySerializer(serializers.ModelSerializer):
+    sensor = SensorSerializer()
+
+    class Meta:
+        model = Frequency
+        fields = '__all__'
+

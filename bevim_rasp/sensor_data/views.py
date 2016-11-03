@@ -3,12 +3,12 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import Acceleration, Sensor, Speed, Amplitude, Frequency
+from .models import Acceleration, Sensor, Frequency
 from . import utils, protocol
-from .serializers import SensorSerializer, DataSerializer
+from .serializers import SensorSerializer, AccelerationSerializer, FrequencySerializer
 from .exceptions import RoutineException
 
-import time, datetime
+import json, time, datetime
 
 
 class SensorRestV1(APIView):
@@ -38,23 +38,7 @@ class AccelerationRestV1(APIView):
 
     def get(self, request, format=None):
         accelerations = Acceleration.objects.all()
-        serializer = DataSerializer(accelerations, many=True)
-        return Response(serializer.data)
-
-
-class SpeedRestV1(APIView):
-
-    def get(self, request, format=None):
-        speeds = Speed.objects.all()
-        serializer = DataSerializer(speeds, many=True)
-        return Response(serializer.data)
-
-
-class AmplitudeRestV1(APIView):
-
-    def get(self, request, format=None):
-        amplitudes = Amplitude.objects.all()
-        serializer = DataSerializer(amplitudes, many=True)
+        serializer = AccelerationSerializer(accelerations, many=True)
         return Response(serializer.data)
 
 
@@ -62,8 +46,9 @@ class FrequencyRestV1(APIView):
 
     def get(self, request, format=None):
         frequencies = Frequency.objects.all()
-        serializer = DataSerializer(frequencies, many=True)
+        serializer = FrequencySerializer(frequencies, many=True)
         return Response(serializer.data)
+
 
 class ControlRestV1(APIView):
    
@@ -73,13 +58,6 @@ class ControlRestV1(APIView):
  
     def put(self, request, format=None):
         
-        self.end_time = datetime.datetime.now().time()
-        print("START TIME:")
-        print(self.start_time)
-
-        print("END TIME:")
-        print(self.end_time)
-
         flag = request.data['flag']
 
         if flag == protocol.STOP_EXPERIMENT_FLAG:
@@ -98,6 +76,9 @@ class ControlRestV1(APIView):
         This method is used to change the frequency of the table
         """
         job = request.data['job']
+        jobs = request.data['jobs_info']
+        jobs_info = json.loads(jobs)
+        print(jobs_info) 
         print("Change frequency service called for Job Nº" + job)
         frequency = request.data['frequency']
         try:
@@ -105,7 +86,7 @@ class ControlRestV1(APIView):
             if job is '1':
                 # If is the first job, set the start experiment flag to true
                 start_experiment = True
-            utils.SerialFacade.set_frequency(frequency, start_experiment)
+            utils.SerialFacade.set_frequency(frequency, start_experiment, jobs_info)
             status_code = 200
         except RoutineException as exception:
             status_code = exception.error_code

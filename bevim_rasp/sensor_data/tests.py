@@ -40,21 +40,6 @@ class DataRestTest(APITestCase):
         expected_response = DataSerializer(accelerations, many=True).data
         self.assertEqual(response.data, expected_response)
 
-    def test_get_speed(self):
-        url = reverse('speed_rest')
-        response = self.client.get(url, format='json')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        speeds = Speed.objects.all()
-        expected_response = DataSerializer(speeds, many=True).data
-        self.assertEqual(response.data, expected_response)
-
-    def test_get_amplitude(self):
-        url = reverse('amplitude_rest')
-        response = self.client.get(url, format='json')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        amplitudes = Amplitude.objects.all()
-        expected_response = DataSerializer(amplitudes, many=True).data
-        self.assertEqual(response.data, expected_response)
 
     def test_get_frequency(self):
         url = reverse('frequency_rest')
