@@ -49,19 +49,26 @@ class FrequencyRestV1(APIView):
         serializer = FrequencySerializer(frequencies, many=True)
         return Response(serializer.data)
 
+    @classmethod
+    def get_current_frequency(cls, request):
+        current_frequency = utils.CurrentFrequency.get_instance().get()
+        now = str(datetime.datetime.now().time())
+        return HttpResponse(json.dumps({'timestamp': now, 'frequency': current_frequency}))
 
 class ControlRestV1(APIView):
-   
+
     http_method_names = ['post', 'put']
     start_time = 0
     end_time = 0
- 
+
     def put(self, request, format=None):
-        
+
         flag = request.data['flag']
 
         if flag == protocol.STOP_EXPERIMENT_FLAG:
             #utils.SerialFacade.stop_experiment() # UNCOMMENT THIS - JUST FOR TEST WHILE THE SIMULATION IS NOT RIGHT
+            # Clean the Current Frequency when experiment is over
+            utils.CurrentFrequency.clean()
             response = HttpResponse(status=200)
         else:
             response = HttpResponseBadRequest()
@@ -78,7 +85,7 @@ class ControlRestV1(APIView):
         job = request.data['job']
         jobs = request.data['jobs_info']
         jobs_info = json.loads(jobs)
-        print(jobs_info) 
+        print(jobs_info)
         print("Change frequency service called for Job Nº" + job)
         frequency = request.data['frequency']
         try:
@@ -86,7 +93,13 @@ class ControlRestV1(APIView):
             if job is '1':
                 # If is the first job, set the start experiment flag to true
                 start_experiment = True
+
             utils.SerialFacade.set_frequency(frequency, start_experiment, jobs_info)
+
+            ########################### - USED TO SIMULATE THE TABLE FREQUENCY RAISE
+            # utils.CurrentFrequency.get_instance().update(80);
+            ###########################
+
             status_code = 200
         except RoutineException as exception:
             status_code = exception.error_code

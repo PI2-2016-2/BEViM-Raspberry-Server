@@ -30,7 +30,7 @@ class Parser:
                     models.Sensor.objects.update_or_create(name=sensor[0])
         except Exception as e:
             logging.error(e)
-    
+
     def get_job_elapsed_time(self, jobs, job):
         time = 0
         for i in range(1, (int(job) + 1)):
@@ -50,7 +50,7 @@ class Parser:
                         acceleration.append(job['job_pk'])
                         break
                 else:
-                    if(timestamp > job_start_time and timestamp <= job_finish_time):                
+                    if(timestamp > job_start_time and timestamp <= job_finish_time):
                         acceleration.append(job['job_pk'])
                         break
         return data
@@ -61,7 +61,7 @@ class Parser:
         for line in lines:
             try:
                 sensor_data = sensor_data_pattern.match(line)
-                if sensor_data: 
+                if sensor_data:
                     brute_data.append(list(sensor_data.groups()))
                 else:
                     print("Line readed with problem: '" + str(line) + "'")
@@ -143,7 +143,7 @@ class PiSerial:
             if not incoming_data:
                 if i > 5:
                     break
-            
+
             if i is 3:
                 if notify_obj:
                     notify_obj.notify_started()
@@ -194,6 +194,43 @@ class Routine:
         send_accelerations(json.dumps(data_with_job_ids))
         #parser.inserting_acceleration(data_with_job_ids)
 
+class CurrentFrequency:
+
+    instance = None
+
+    @classmethod
+    def get_instance(cls):
+        if not cls.instance:
+            cls.instance = CurrentFrequency()
+        return cls.instance
+
+    def __init__(self):
+        self.current_frequency = -1
+
+    def get(self):
+        return self.current_frequency
+
+    def update(self, new_frequency):
+        print("Updating current frequency to %s Hz." % new_frequency)
+        # self.current_frequency = new_frequency
+        self.__simulate_waiting_for_frequency(new_frequency)
+
+    def __simulate_waiting_for_frequency(self, new_frequency):
+        increment_thread = Thread(
+            target=self.__stub_increment_frequency,
+            kwargs={'frequency': new_frequency}
+        )
+        increment_thread.start()
+
+    def __stub_increment_frequency(self, frequency=0):
+        while self.current_frequency < frequency:
+            self.current_frequency += 11
+            print("Frequency updated to %s Hz" % self.current_frequency)
+            time.sleep(1)
+
+    @classmethod
+    def clean(cls):
+        cls.instance = None
 
 class SerialFacade:
     """
@@ -284,7 +321,7 @@ def send_accelerations(data):
 
 
 class DatabaseUtils:
-    
+
     def execute_query(query, data_tuple=False):
         with connection.cursor() as cursor:
             try:

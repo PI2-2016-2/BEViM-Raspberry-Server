@@ -8,4 +8,5 @@ urlpatterns = [
 
     #  Control URLS
     url(r'^control/change_frequency$', views.ControlRestV1.as_view(), name='control_rest'),
+    url(r'^consult/current_frequency$', views.FrequencyRestV1.get_current_frequency, name='consult_current_frequency'),
 ]
