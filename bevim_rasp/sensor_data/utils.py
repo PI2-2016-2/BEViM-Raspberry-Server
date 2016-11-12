@@ -1,5 +1,5 @@
 import os
-import subprocess
+import subprocess, requests, json
 import serial, sys, time, re
 
 from threading import Thread
@@ -183,10 +183,16 @@ class Routine:
     @with_serial_open
     def parser_routine(cls, notify_obj=None, piserial=None, jobs_info=None):
         parser = Parser()
+        print ("Getting data")
         data = piserial.data_output_list(notify_obj)
+        print ("Getting data tuple")
         data_list = parser.creating_data_tuple(data)
+        print ("Getting data with jobs")
         data_with_job_ids = parser.add_jobs_ids(data_list, jobs_info)
-        parser.inserting_acceleration(data_with_job_ids)
+
+        print ("Getting data tuple")
+        send_accelerations(json.dumps(data_with_job_ids))
+        #parser.inserting_acceleration(data_with_job_ids)
 
 
 class SerialFacade:
@@ -229,7 +235,7 @@ class SerialFacade:
 
     @classmethod
     def collect_sensors_data(cls, start_experiment, jobs_info):
-        if start_experiment:
+        if start_experiment:  
             notify_obj = cls.NotifyStartedTool()
             collect_data_thread = Thread(
                 target=Routine.parser_routine,
@@ -269,6 +275,12 @@ def insert_command(data, begin_experiment_flag=False):
     print('\nSending this data to serial port: ' + data)
     piserial.data_input(data)
     piserial.close_serialcom()
+
+def send_accelerations(data):
+    application_url = "http://192.168.1.10:8000/bevim/receive_result"
+    headers = {'content-type': 'application/json'}
+    response = requests.put(application_url, data=data, headers=headers)
+    print (response)
 
 
 class DatabaseUtils:
