@@ -94,10 +94,12 @@ class ControlRestV1(APIView):
                 # If is the first job, set the start experiment flag to true
                 start_experiment = True
 
-            utils.SerialFacade.set_frequency(frequency, start_experiment, jobs_info)
+            ########################### - COMMENTED TO SIMULATE THE TABLE FREQUENCY RAISE
+            # utils.SerialFacade.set_frequency(frequency, start_experiment, jobs_info)
+            ########################### - USED TO SIMULATE THE TABLE FREQUENCY RAISE
 
             ########################### - USED TO SIMULATE THE TABLE FREQUENCY RAISE
-            # utils.CurrentFrequency.get_instance().update(80);
+            utils.CurrentFrequency.get_instance().update(80);
             ###########################
 
             status_code = 200

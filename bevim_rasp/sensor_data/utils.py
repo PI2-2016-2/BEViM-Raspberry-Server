@@ -206,6 +206,7 @@ class CurrentFrequency:
 
     def __init__(self):
         self.current_frequency = -1
+        self.already_lauched = False
 
     def get(self):
         return self.current_frequency
@@ -216,15 +217,17 @@ class CurrentFrequency:
         self.__simulate_waiting_for_frequency(new_frequency)
 
     def __simulate_waiting_for_frequency(self, new_frequency):
-        increment_thread = Thread(
-            target=self.__stub_increment_frequency,
-            kwargs={'frequency': new_frequency}
-        )
-        increment_thread.start()
+        if(not self.already_lauched):
+            increment_thread = Thread(
+                target=self.__stub_increment_frequency,
+                kwargs={'frequency': new_frequency}
+            )
+            increment_thread.start()
+            self.already_lauched = True
 
     def __stub_increment_frequency(self, frequency=0):
         while self.current_frequency < frequency:
-            self.current_frequency += 11
+            self.current_frequency += 5
             print("Frequency updated to %s Hz" % self.current_frequency)
             time.sleep(1)
 
@@ -272,7 +275,7 @@ class SerialFacade:
 
     @classmethod
     def collect_sensors_data(cls, start_experiment, jobs_info):
-        if start_experiment:  
+        if start_experiment:
             notify_obj = cls.NotifyStartedTool()
             collect_data_thread = Thread(
                 target=Routine.parser_routine,
