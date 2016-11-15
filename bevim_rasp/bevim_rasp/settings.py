@@ -81,7 +81,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'bevim_rasp',
         'USER': 'root',
-        'PASSWORD': 'bevim',
+        'PASSWORD': 'root',
         'HOST': 'localhost',   # Or an IP Address that your DB is hosted on
         'PORT': '',
     }

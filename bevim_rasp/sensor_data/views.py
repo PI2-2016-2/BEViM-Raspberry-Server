@@ -20,14 +20,6 @@ class SensorRestV1(APIView):
         return Response(serializer.data)
 
     def post(self, request, format=None):
-        data = request.data
-        if data and (data['value'] == protocol.GET_AVAILABLE_SENSORS_FLAG):
-            response = self.get_sensors_quantity()
-        else:
-            response = Response(data)
-        return response
-
-    def get_sensors_quantity(self):
         """ Method to consult the table to check the present sensors """
         utils.SerialFacade.get_available_sensors()
         print('Exiting get_sensors_quantity() method')
@@ -73,7 +65,7 @@ class ControlRestV1(APIView):
         else:
             response = HttpResponseBadRequest()
         return response
-    
+
 
     def post(self, request, format=None):
         """

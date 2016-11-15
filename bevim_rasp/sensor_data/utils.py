@@ -12,6 +12,7 @@ from sensor_data import models
 from django.db import transaction, connection, IntegrityError
 import logging
 
+from bitstring import BitArray
 
 # RESPONSE CODES
 CONTROL_INTEGRATE_ERROR = 500
@@ -27,7 +28,7 @@ class Parser:
         try:
             with transaction.atomic():
                 for sensor in sensors:
-                    models.Sensor.objects.update_or_create(name=sensor[0])
+                    models.Sensor.objects.update_or_create(name=sensor)
         except Exception as e:
             logging.error(e)
 
@@ -114,9 +115,33 @@ class PiSerial:
         else:
             print('Port closed with success')
 
+    def read_active_sensors(self, notify_obj=None):
+        print("Reading active sensors...")
+        i = 0
+        while True:
+            sensors = self.ser.read()
+            print(str(i) + " Read sensors: " + str(sensors))
+            if sensors:
+                break
+
+            if i is 3: # Waiting 3 loops to set the thread started
+                if notify_obj:
+                    notify_obj.notify_started()
+                    notify_obj = None
+            i += 1
+        bits = BitArray(sensors)
+        print("Read sensors array: " + str(bits))
+        i = 8
+        active_sensors = []
+        for active in bits:
+            if active:
+                active_sensors.append("S" + str(i))
+            i -= 1
+        return active_sensors
+
     def data_output(self):
         try:
-            line = self.ser.readline()
+            timestamp = self.ser.read(3)
         except serial.SerialException as e:
             output = False
             print(e)
@@ -126,6 +151,7 @@ class PiSerial:
             else:
                 output = False
         return output
+
 
     def data_output_list(self, notify_obj=None):
         self.data_list = []
@@ -158,10 +184,8 @@ class PiSerial:
         #with open ('problems', 'a') as f: [f.write(p) for p in problems]
         return self.data_list
 
-    def data_input(self,data):
-        data = (data + '\n').encode('utf-8')
+    def data_input(self, data):
         self.bytes_writen = self.ser.write(data)
-
 
 class Routine:
 
@@ -179,9 +203,7 @@ class Routine:
         print('On get sensors routine...')
         parser = Parser()
         parser.inserting_sensors(
-            parser.creating_data_tuple(
-                piserial.data_output_list(notify_obj)
-            )
+            piserial.read_active_sensors(notify_obj)
         )
 
     @classmethod
@@ -318,7 +340,7 @@ def insert_command(data, begin_experiment_flag=False):
         print('Start experiment flag setted. Sending -1 to serial port...')
         piserial.data_input(protocol.START_EXPERIMENT_FLAG)
     time.sleep(0.1)
-    print('\nSending this data to serial port: ' + data)
+    print('\nSending this data to serial port: ' + str(data))
     piserial.data_input(data)
     piserial.close_serialcom()
 
