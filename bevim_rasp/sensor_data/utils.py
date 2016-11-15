@@ -115,11 +115,16 @@ class PiSerial:
             print('Port closed with success')
 
     def data_output(self):
-        line = self.ser.readline()
-        if line:
-            output = line.decode('utf-8')
-        else:
+        try:
+            line = self.ser.readline()
+        except serial.SerialException as e:
             output = False
+            print(e)
+        else:
+            if line:
+                output = line.decode('utf-8')
+            else:
+                output = False
         return output
 
     def data_output_list(self, notify_obj=None):
@@ -139,7 +144,7 @@ class PiSerial:
                     #problems.append(incoming_data)
                     #print("Line readed with problem: '" + str(incoming_data) + "'")
 
-            #print('i = ' + str(i) +  ' - Readed line decoded: ' + incoming_data)
+            #print('i = ' + str(i) +  ' - Readed line decoded: ' + str(incoming_data))
             if not incoming_data:
                 if i > 5:
                     break
@@ -191,6 +196,7 @@ class Routine:
         data_with_job_ids = parser.add_jobs_ids(data_list, jobs_info)
 
         print ("Getting data tuple")
+        print(len(data_with_job_ids))
         send_accelerations(json.dumps(data_with_job_ids))
         #parser.inserting_acceleration(data_with_job_ids)
 
@@ -227,7 +233,7 @@ class CurrentFrequency:
 
     def __stub_increment_frequency(self, frequency=0):
         while self.current_frequency < frequency:
-            self.current_frequency += 5
+            self.current_frequency += 1
             print("Frequency updated to %s Hz" % self.current_frequency)
             time.sleep(1)
 
@@ -317,7 +323,7 @@ def insert_command(data, begin_experiment_flag=False):
     piserial.close_serialcom()
 
 def send_accelerations(data):
-    application_url = "http://192.168.1.10:8000/bevim/receive_result"
+    application_url = "http://192.168.25.28:8000/bevim/receive_result"
     headers = {'content-type': 'application/json'}
     response = requests.put(application_url, data=data, headers=headers)
     print (response)

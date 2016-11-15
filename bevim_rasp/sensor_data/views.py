@@ -73,37 +73,58 @@ class ControlRestV1(APIView):
         else:
             response = HttpResponseBadRequest()
         return response
+    
 
     def post(self, request, format=None):
-        print("ON CHANGE FREQUENCY POST")
-        self.start_time = datetime.datetime.now().time()
-        print(self.start_time)
-        time.sleep(3)
         """
         This method is used to change the frequency of the table
         """
+        experiment = request.data['experiment']
         job = request.data['job']
         jobs = request.data['jobs_info']
         jobs_info = json.loads(jobs)
-        print(jobs_info)
-        print("Change frequency service called for Job Nº" + job)
         frequency = request.data['frequency']
-        try:
-            start_experiment = False
-            if job is '1':
-                # If is the first job, set the start experiment flag to true
-                start_experiment = True
 
-            ########################### - COMMENTED TO SIMULATE THE TABLE FREQUENCY RAISE
-            # utils.SerialFacade.set_frequency(frequency, start_experiment, jobs_info)
-            ########################### - USED TO SIMULATE THE TABLE FREQUENCY RAISE
+        print("Change frequency service called for Job Nº %s" % job)
 
-            ########################### - USED TO SIMULATE THE TABLE FREQUENCY RAISE
-            utils.CurrentFrequency.get_instance().update(80);
-            ###########################
+        status_code = 200
+        if ActiveExperiment.get_instance().get(experiment):
+            try:
+                start_experiment = False
+                if job is '1':
+                    # If is the first job, set the start experiment flag to true
+                    start_experiment = True
 
-            status_code = 200
-        except RoutineException as exception:
-            status_code = exception.error_code
+                ########################### - COMMENTED TO SIMULATE THE TABLE FREQUENCY RAISE
+                utils.SerialFacade.set_frequency(frequency, start_experiment, jobs_info)
+                ########################### - USED TO SIMULATE THE TABLE FREQUENCY RAISE
+
+                ########################### - USED TO SIMULATE THE TABLE FREQUENCY RAISE
+                utils.CurrentFrequency.get_instance().update(40);
+                ###########################
+
+            except RoutineException as exception:
+                status_code = exception.error_code
 
         return HttpResponse(status=status_code)
+
+class ActiveExperiment:
+
+    instance = None;
+
+    @classmethod
+    def get_instance(cls):
+        if not cls.instance:
+            cls.instance = ActiveExperiment()
+        return cls.instance
+
+    def __init__(self):
+        self.experiments = {}
+
+    def get(self, experiment_id):
+        if experiment_id in self.experiments:
+            return False
+        else:
+            self.experiments[experiment_id] = True
+            return True
+
