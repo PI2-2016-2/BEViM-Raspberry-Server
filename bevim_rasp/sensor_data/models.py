@@ -15,6 +15,10 @@ class Sensor(models.Model):
         blank=False
     )
 
+    @classmethod
+    def get_sensors_quantity(cls):
+        return cls.objects.count()
+
     def __str__(self):
         return self.name
 

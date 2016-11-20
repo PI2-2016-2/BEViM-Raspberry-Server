@@ -12,7 +12,7 @@ from sensor_data import models
 from django.db import transaction, connection, IntegrityError
 import logging
 
-from bitstring import BitArray
+from bitstring import BitArray, Bits
 
 # RESPONSE CODES
 CONTROL_INTEGRATE_ERROR = 500
@@ -27,8 +27,10 @@ class Parser:
         logging.info('Verifying Sensors table info')
         try:
             with transaction.atomic():
+                # Deleting all the saved sensors to save only the active ones
+                models.Sensor.objects.all().delete()
                 for sensor in sensors:
-                    models.Sensor.objects.update_or_create(name=sensor)
+                    models.Sensor.objects.create(name=sensor)
         except Exception as e:
             logging.error(e)
 
@@ -100,6 +102,13 @@ class PiSerial:
         self.port = '/dev/ttyACM0'
         self.baudrate = 9600
         self.timeout = 1
+        self.current_timestamp = 0
+        self.sensors_data = {}
+        self.initialize_collect_sensors_variables()
+
+    def initialize_collect_sensors_variables(self):
+        for sensor in models.Sensor.objects.all():
+            self.sensors_data[sensor.name] = {}
 
     def open_serialcom(self):
         try:
@@ -130,59 +139,81 @@ class PiSerial:
                     notify_obj = None
             i += 1
         bits = BitArray(sensors)
-        print("Read sensors array: " + str(bits))
         i = 8
         active_sensors = []
         for active in bits:
             if active:
-                active_sensors.append("S" + str(i))
+                active_sensors.append(i)
             i -= 1
         return active_sensors
 
-    def data_output(self):
+    def read_sensor_data(self):
         try:
-            timestamp = self.ser.read(3)
-        except serial.SerialException as e:
-            output = False
-            print(e)
-        else:
-            if line:
-                output = line.decode('utf-8')
-            else:
-                output = False
-        return output
+            header = self.ser.read()
+            print("HEADER IN BYTES %s " % str(header))
+            if header:
 
+                header = BitArray(header)
+
+                if header.uint is protocol.TIMESTAMP_HEADER:
+                    print("TIMESTAMP HEADER")
+                    timestamp = self.ser.read(protocol.TIMESTAMP_BYTES_QUANTITY)
+                    print("TIMESTAMP VALUE IN BYTES %s " % str(timestamp))
+                    timestamp = BitArray(timestamp).uint
+                    self.current_timestamp = timestamp
+                    print("TIMESTAMP VALUE %s " % self.current_timestamp)
+                elif header.uint is protocol.FREQUENCY_FLAG_HEADER:
+                    print("FREQUENCY REACHED HEADER")
+                    CurrentFrequency.get_instance().update__(True)
+                else:
+                    print("SENSOR HEADER")
+                    sensor_number = header[0:4].uint
+                    sensor_axis = header[4:8].uint
+
+                    if protocol.validate_sensor_number_and_axis(sensor_number, sensor_axis):
+                        print("Sensor number %s; Sensor axis %s" % (sensor_number, sensor_axis) )
+                        axis_value = self.ser.read(protocol.SENSOR_BYTES_QUANTITY)
+                        axis_value = Bits(axis_value).int
+
+                        sensor_number = str(sensor_number)
+
+                        if self.current_timestamp in self.sensors_data[sensor_number]:
+                            sensor_data = self.sensors_data[sensor_number][self.current_timestamp]
+                        else:
+                            sensor_data = [sensor_number, -1, -1, -1, -1]
+
+                        sensor_data[sensor_axis] = axis_value
+
+                        # The last position of the result list ([S!, 10, 10, 10, 123042]) is the timestamp
+                        sensor_data[-1] = self.current_timestamp
+
+                        self.sensors_data[sensor_number][self.current_timestamp] = sensor_data
+                    else:
+                        print("\n SENSOR BYTE WITH ERROR: Sensor number %s ; Axis %s \n" % (sensor_number, sensor_axis))
+                        time.sleep(3)
+
+        except serial.SerialException as e:
+            print(e)
 
     def data_output_list(self, notify_obj=None):
-        self.data_list = []
-        i = 0
-        pattern = protocol.get_sensor_data_pattern()
-        while True:
-            incoming_data = self.data_output()
-            if incoming_data:
-                sensor_data = pattern.match(incoming_data)
-                if sensor_data:
-                    self.data_list.append(incoming_data)
-                    timestamp = float(sensor_data.groups()[4])
-                    if timestamp >= 20000:
-                        break
-                #else:
-                    #problems.append(incoming_data)
-                    #print("Line readed with problem: '" + str(incoming_data) + "'")
 
-            #print('i = ' + str(i) +  ' - Readed line decoded: ' + str(incoming_data))
-            if not incoming_data:
-                if i > 5:
-                    break
+        i = 0
+        while True:
+            self.read_sensor_data()
+
+            print(self.sensors_data)
+            print()
+
+            if self.current_timestamp > 4000:
+                break;
 
             if i is 3:
                 if notify_obj:
                     notify_obj.notify_started()
                     notify_obj = None
+
             i += 1
-        #self.close_serialcom()
-        #with open ('problems', 'a') as f: [f.write(p) for p in problems]
-        return self.data_list
+        return self.sensors_data
 
     def data_input(self, data):
         self.bytes_writen = self.ser.write(data)
@@ -212,14 +243,26 @@ class Routine:
         parser = Parser()
         print ("Getting data")
         data = piserial.data_output_list(notify_obj)
-        print ("Getting data tuple")
-        data_list = parser.creating_data_tuple(data)
+
+        sensors_data = []
+        for data_list in data.values():
+            for sensor_data in data_list.values():
+                sensors_data.append(sensor_data)
+
+        print("\ndata_list\n")
+        print(sensors_data)
+
         print ("Getting data with jobs")
-        data_with_job_ids = parser.add_jobs_ids(data_list, jobs_info)
+        data_with_job_ids = parser.add_jobs_ids(sensors_data, jobs_info)
+
+        print("\nDATA WITH JOB IDS\n")
+        print(data_with_job_ids)
 
         print ("Getting data tuple")
         print(len(data_with_job_ids))
         send_accelerations(json.dumps(data_with_job_ids))
+        print ("JSON DUMPS: ")
+        print(json.dumps(data_with_job_ids))
         #parser.inserting_acceleration(data_with_job_ids)
 
 class CurrentFrequency:
@@ -233,11 +276,18 @@ class CurrentFrequency:
         return cls.instance
 
     def __init__(self):
+        self.frequency_reached = False
+
+        # Used for simulation
         self.current_frequency = -1
         self.already_lauched = False
 
     def get(self):
-        return self.current_frequency
+        # return self.current_frequency
+        return self.frequency_reached
+
+    def update__(self, reached=False):
+        self.frequency_reached = reached
 
     def update(self, new_frequency):
         print("Updating current frequency to %s Hz." % new_frequency)
@@ -345,7 +395,7 @@ def insert_command(data, begin_experiment_flag=False):
     piserial.close_serialcom()
 
 def send_accelerations(data):
-    application_url = "http://192.168.25.28:8000/bevim/receive_result"
+    application_url = "http://localhost:8000/bevim/receive_result"
     headers = {'content-type': 'application/json'}
     response = requests.put(application_url, data=data, headers=headers)
     print (response)
