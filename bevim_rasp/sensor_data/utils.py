@@ -155,12 +155,17 @@ class PiSerial:
 
                 header = BitArray(header)
 
+                self.read_data.append(str(header.bin) + '\n')
+
                 if header.uint is protocol.TIMESTAMP_HEADER:
                     print("TIMESTAMP HEADER")
                     timestamp = self.ser.read(protocol.TIMESTAMP_BYTES_QUANTITY)
                     print("TIMESTAMP VALUE IN BYTES %s " % str(timestamp))
                     timestamp = BitArray(timestamp).uint
                     self.current_timestamp = timestamp
+
+                    self.read_data.append(str(timestamp) + '\n')
+
                     print("TIMESTAMP VALUE %s " % self.current_timestamp)
                 elif header.uint is protocol.FREQUENCY_FLAG_HEADER:
                     print("FREQUENCY REACHED HEADER")
@@ -173,7 +178,7 @@ class PiSerial:
                     if protocol.validate_sensor_number_and_axis(sensor_number, sensor_axis):
                         print("Sensor number %s; Sensor axis %s" % (sensor_number, sensor_axis) )
                         axis_value = self.ser.read(protocol.SENSOR_BYTES_QUANTITY)
-                        axis_value = Bits(axis_value).int
+                        axis_value = Bits(axis_value).int / protocol.SENSOR_LSB_RESOLUTION
 
                         sensor_number = str(sensor_number)
 
@@ -188,6 +193,9 @@ class PiSerial:
                         sensor_data[-1] = self.current_timestamp
 
                         self.sensors_data[sensor_number][self.current_timestamp] = sensor_data
+
+                        self.read_data.append(str(sensor_data) + '\n\n')
+
                     else:
                         print("\n SENSOR BYTE WITH ERROR: Sensor number %s ; Axis %s \n" % (sensor_number, sensor_axis))
                         time.sleep(3)
@@ -197,22 +205,32 @@ class PiSerial:
 
     def data_output_list(self, notify_obj=None):
 
+        self.read_data = []
+
         i = 0
         while True:
             self.read_sensor_data()
 
-            print(self.sensors_data)
-            print()
+            # print(self.sensors_data)
+            # print()
 
             if self.current_timestamp > 4000:
-                break;
+                break
 
             if i is 3:
                 if notify_obj:
                     notify_obj.notify_started()
                     notify_obj = None
 
+            # if i is 500:
+            #     break
+            # print(i)
+
             i += 1
+
+        # SAVING IN THE FILE TO SEE - REMOVE THIS
+        with open ('read_data', 'a') as f: [f.write(d) for d in self.read_data]
+
         return self.sensors_data
 
     def data_input(self, data):
@@ -249,14 +267,14 @@ class Routine:
             for sensor_data in data_list.values():
                 sensors_data.append(sensor_data)
 
-        print("\ndata_list\n")
-        print(sensors_data)
+        # print("\ndata_list\n")
+        # print(sensors_data)
 
         print ("Getting data with jobs")
         data_with_job_ids = parser.add_jobs_ids(sensors_data, jobs_info)
 
-        print("\nDATA WITH JOB IDS\n")
-        print(data_with_job_ids)
+        # print("\nDATA WITH JOB IDS\n")
+        # print(data_with_job_ids)
 
         print ("Getting data tuple")
         print(len(data_with_job_ids))
@@ -305,9 +323,10 @@ class CurrentFrequency:
 
     def __stub_increment_frequency(self, frequency=0):
         while self.current_frequency < frequency:
-            self.current_frequency += 1
+            self.current_frequency += 4
             print("Frequency updated to %s Hz" % self.current_frequency)
             time.sleep(1)
+        self.update__(True)
 
     @classmethod
     def clean(cls):
@@ -384,6 +403,8 @@ class SerialFacade:
 
 
 def insert_command(data, begin_experiment_flag=False):
+    if type(data) is not bytes:
+        data = bytes([int(data)])
     piserial = PiSerial()
     piserial.open_serialcom()
     if(begin_experiment_flag):

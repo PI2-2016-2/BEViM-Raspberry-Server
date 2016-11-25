@@ -58,7 +58,7 @@ class ControlRestV1(APIView):
         flag = request.data['flag']
 
         if flag == protocol.STOP_EXPERIMENT_FLAG:
-            #utils.SerialFacade.stop_experiment() # UNCOMMENT THIS - JUST FOR TEST WHILE THE SIMULATION IS NOT RIGHT
+            # utils.SerialFacade.stop_experiment() # UNCOMMENT THIS - JUST FOR TEST WHILE THE SIMULATION IS NOT RIGHT
             # Clean the Current Frequency when experiment is over
             utils.CurrentFrequency.clean()
             response = HttpResponse(status=200)

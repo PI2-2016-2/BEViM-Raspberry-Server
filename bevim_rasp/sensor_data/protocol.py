@@ -20,6 +20,8 @@ SENSOR_BYTES_QUANTITY = 2
 
 FREQUENCY_FLAG_HEADER = 3
 
+SENSOR_LSB_RESOLUTION = 16384
+
 def get_sensor_data_pattern():
     SENSOR_DATA_PATTERN_REGEX = r'^([A-Za-z\d]+),([-]?\d*[\.]?\d+)?,([-]?\d*[\.]?\d+)?,([-]?\d*[\.]?\d+)?,([-]?\d*[\.]?\d+)?\r\n$'
     import re
