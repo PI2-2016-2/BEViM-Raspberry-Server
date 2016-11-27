@@ -133,7 +133,7 @@ class PiSerial:
             if sensors:
                 break
 
-            if i is 3: # Waiting 3 loops to set the thread started
+            if i is 1: # Waiting 2 loops to set the thread started
                 if notify_obj:
                     notify_obj.notify_started()
                     notify_obj = None
@@ -148,60 +148,62 @@ class PiSerial:
         return active_sensors
 
     def read_sensor_data(self):
-        try:
-            header = self.ser.read()
-            print("HEADER IN BYTES %s " % str(header))
-            if header:
+        header = self.ser.read()
+        print("HEADER IN BYTES %s " % str(header))
+        if header:
 
-                header = BitArray(header)
+            header = BitArray(header)
 
-                self.read_data.append(str(header.bin) + '\n')
+            self.read_data.append(str(header.bin) + '\n')
 
-                if header.uint is protocol.TIMESTAMP_HEADER:
-                    print("TIMESTAMP HEADER")
-                    timestamp = self.ser.read(protocol.TIMESTAMP_BYTES_QUANTITY)
-                    print("TIMESTAMP VALUE IN BYTES %s " % str(timestamp))
-                    timestamp = BitArray(timestamp).uint
-                    self.current_timestamp = timestamp
+            if header.uint is protocol.TIMESTAMP_HEADER:
+                print("TIMESTAMP HEADER")
+                timestamp = self.ser.read(protocol.TIMESTAMP_BYTES_QUANTITY)
+                print("TIMESTAMP VALUE IN BYTES %s " % str(timestamp))
+                timestamp = BitArray(timestamp).uint
+                self.current_timestamp = timestamp
 
-                    self.read_data.append(str(timestamp) + '\n')
+                self.read_data.append(str(timestamp) + '\n')
 
-                    print("TIMESTAMP VALUE %s " % self.current_timestamp)
-                elif header.uint is protocol.FREQUENCY_FLAG_HEADER:
-                    print("FREQUENCY REACHED HEADER")
-                    CurrentFrequency.get_instance().update__(True)
-                else:
-                    print("SENSOR HEADER")
-                    sensor_number = header[0:4].uint
-                    sensor_axis = header[4:8].uint
+                print("TIMESTAMP VALUE %s " % self.current_timestamp)
+            elif header.uint is protocol.FREQUENCY_FLAG_HEADER:
+                print("FREQUENCY REACHED HEADER")
+                frequency_in_bytes = self.ser.read(protocol.FREQUENCY_BYTES_QUANTITY)
+                frequency = BitArray(frequency_in_bytes).uint
+                CurrentFrequency.get_instance().update(frequency, system_status=True)
+            else:
+                print("SENSOR HEADER")
+                sensor_number = header[0:4].uint
+                sensor_axis = header[4:8].uint
 
-                    if protocol.validate_sensor_number_and_axis(sensor_number, sensor_axis):
-                        print("Sensor number %s; Sensor axis %s" % (sensor_number, sensor_axis) )
-                        axis_value = self.ser.read(protocol.SENSOR_BYTES_QUANTITY)
-                        axis_value = Bits(axis_value).int / protocol.SENSOR_LSB_RESOLUTION
+                if protocol.validate_sensor_number_and_axis(sensor_number, sensor_axis):
+                    print("Sensor number %s; Sensor axis %s" % (sensor_number, sensor_axis) )
+                    axis_value = self.ser.read(protocol.SENSOR_BYTES_QUANTITY)
 
-                        sensor_number = str(sensor_number)
+                    # ENABLE THIS DIVISION IF USING ACCELEROMETER
+                    # axis_value = Bits(axis_value).int / protocol.SENSOR_LSB_RESOLUTION
+                    axis_value = Bits(axis_value).int
 
-                        if self.current_timestamp in self.sensors_data[sensor_number]:
-                            sensor_data = self.sensors_data[sensor_number][self.current_timestamp]
-                        else:
-                            sensor_data = [sensor_number, -1, -1, -1, -1]
+                    sensor_number = str(sensor_number)
 
-                        sensor_data[sensor_axis] = axis_value
-
-                        # The last position of the result list ([S!, 10, 10, 10, 123042]) is the timestamp
-                        sensor_data[-1] = self.current_timestamp
-
-                        self.sensors_data[sensor_number][self.current_timestamp] = sensor_data
-
-                        self.read_data.append(str(sensor_data) + '\n\n')
-
+                    if self.current_timestamp in self.sensors_data[sensor_number]:
+                        sensor_data = self.sensors_data[sensor_number][self.current_timestamp]
                     else:
-                        print("\n SENSOR BYTE WITH ERROR: Sensor number %s ; Axis %s \n" % (sensor_number, sensor_axis))
-                        time.sleep(3)
+                        sensor_data = [sensor_number, -1, -1, -1, -1]
 
-        except serial.SerialException as e:
-            print(e)
+                    sensor_data[sensor_axis] = axis_value
+
+                    # The last position of the result list ([S!, 10, 10, 10, 123042]) is the timestamp
+                    sensor_data[-1] = self.current_timestamp
+
+                    self.sensors_data[sensor_number][self.current_timestamp] = sensor_data
+
+                    self.read_data.append(str(sensor_data) + '\n\n')
+
+                else:
+                    print("\n SENSOR BYTE WITH ERROR: Sensor number %s ; Axis %s \n" % (sensor_number, sensor_axis))
+                    time.sleep(3)
+
 
     def data_output_list(self, notify_obj=None):
 
@@ -209,7 +211,11 @@ class PiSerial:
 
         i = 0
         while True:
-            self.read_sensor_data()
+
+            try:
+                self.read_sensor_data()
+            except serial.SerialException as e:
+                raise RoutineException(250, aditional_exception=e)
 
             # print(self.sensors_data)
             # print()
@@ -217,7 +223,7 @@ class PiSerial:
             if self.current_timestamp > 4000:
                 break
 
-            if i is 3:
+            if i is 1:
                 if notify_obj:
                     notify_obj.notify_started()
                     notify_obj = None
@@ -258,30 +264,38 @@ class Routine:
     @classmethod
     @with_serial_open
     def parser_routine(cls, notify_obj=None, piserial=None, jobs_info=None):
-        parser = Parser()
-        print ("Getting data")
-        data = piserial.data_output_list(notify_obj)
 
-        sensors_data = []
-        for data_list in data.values():
-            for sensor_data in data_list.values():
-                sensors_data.append(sensor_data)
+        try:
+            print("Getting data")
+            data = piserial.data_output_list(notify_obj)
+        except RoutineException as e:
+            # Communicate that system is down
+            CurrentFrequency.get_instance().update(system_status=False)
+        else:
+            # print ("JSON DUMPS -------------------------------: \n\n\n\n")
+            # print(json.dumps(data))
 
-        # print("\ndata_list\n")
-        # print(sensors_data)
+            sensors_data = []
+            for data_list in data.values():
+                for sensor_data in data_list.values():
+                    sensors_data.append(sensor_data)
 
-        print ("Getting data with jobs")
-        data_with_job_ids = parser.add_jobs_ids(sensors_data, jobs_info)
+            # print("\ndata_list\n")
+            # print(sensors_data)
 
-        # print("\nDATA WITH JOB IDS\n")
-        # print(data_with_job_ids)
+            print("Getting data with jobs")
+            parser = Parser()
+            data_with_job_ids = parser.add_jobs_ids(sensors_data, jobs_info)
 
-        print ("Getting data tuple")
-        print(len(data_with_job_ids))
-        send_accelerations(json.dumps(data_with_job_ids))
-        print ("JSON DUMPS: ")
-        print(json.dumps(data_with_job_ids))
-        #parser.inserting_acceleration(data_with_job_ids)
+            # print("\nDATA WITH JOB IDS\n")
+            # print(data_with_job_ids)
+
+            print ("Getting data tuple")
+            print(len(data_with_job_ids))
+            send_accelerations(json.dumps(data_with_job_ids))
+            print ("JSON DUMPS: ")
+            print(json.dumps(data_with_job_ids))
+            #parser.inserting_acceleration(data_with_job_ids)
 
 class CurrentFrequency:
 
@@ -294,23 +308,21 @@ class CurrentFrequency:
         return cls.instance
 
     def __init__(self):
-        self.frequency_reached = False
+        self.current_frequency = -1
+        self.system_status = True
 
         # Used for simulation
-        self.current_frequency = -1
-        self.already_lauched = False
+        # self.already_lauched = False
 
     def get(self):
-        # return self.current_frequency
-        return self.frequency_reached
+        return (self.current_frequency, self.system_status)
 
-    def update__(self, reached=False):
-        self.frequency_reached = reached
-
-    def update(self, new_frequency):
-        print("Updating current frequency to %s Hz." % new_frequency)
-        # self.current_frequency = new_frequency
-        self.__simulate_waiting_for_frequency(new_frequency)
+    def update(self, new_frequency=None, system_status=False):
+        if new_frequency is not None:
+            print("Updating current frequency to %s Hz." % new_frequency)
+            self.current_frequency = new_frequency
+        self.system_status = system_status
+        # self.__simulate_waiting_for_frequency(new_frequency)
 
     def __simulate_waiting_for_frequency(self, new_frequency):
         if(not self.already_lauched):
@@ -326,7 +338,6 @@ class CurrentFrequency:
             self.current_frequency += 4
             print("Frequency updated to %s Hz" % self.current_frequency)
             time.sleep(1)
-        self.update__(True)
 
     @classmethod
     def clean(cls):

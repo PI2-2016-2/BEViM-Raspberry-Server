@@ -43,27 +43,46 @@ class FrequencyRestV1(APIView):
 
     @classmethod
     def get_current_frequency(cls, request):
-        current_frequency = utils.CurrentFrequency.get_instance().get()
+        current_frequency, system_status = utils.CurrentFrequency.get_instance().get()
         now = str(datetime.datetime.now().time())
-        return HttpResponse(json.dumps({'timestamp': now, 'frequency': current_frequency}))
+        return HttpResponse(json.dumps({
+            'timestamp': now,
+            'frequency': current_frequency,
+            'system_status': system_status
+        }))
 
 class ControlRestV1(APIView):
 
-    http_method_names = ['post', 'put']
-    start_time = 0
-    end_time = 0
+    http_method_names = ['get', 'post', 'put']
+
+    def get(self, request, format=None):
+        """ Do here stuff before the experiment start
+        """
+        print("New experiment starting...")
+        experiment_id = request.GET['experiment']
+        # Cleaning variables to start new experiment
+        ActiveExperiment.clean()
+        utils.CurrentFrequency.clean()
+        return HttpResponse(status=200)
 
     def put(self, request, format=None):
 
-        flag = request.data['flag']
+        experiment_id = request.data['experiment']
+        forced_stop = request.data['forced_stop']
 
-        if flag == protocol.STOP_EXPERIMENT_FLAG:
+        if ActiveExperiment.get_instance().check(experiment_id):
+            # Sending signal to stop collecting data
+
             # utils.SerialFacade.stop_experiment() # UNCOMMENT THIS - JUST FOR TEST WHILE THE SIMULATION IS NOT RIGHT
-            # Clean the Current Frequency when experiment is over
+
+            # Clean the Current Frequency instance when experiment is over
             utils.CurrentFrequency.clean()
+
+            # Removing experiment from active ones
+            ActiveExperiment.get_instance().remove(experiment_id)
             response = HttpResponse(status=200)
         else:
-            response = HttpResponseBadRequest()
+            response = HttpResponseBadRequest("This experiment no longer active.")
         return response
 
 
@@ -92,7 +111,7 @@ class ControlRestV1(APIView):
                 ########################### - USED TO SIMULATE THE TABLE FREQUENCY RAISE
 
                 ########################### - USED TO SIMULATE THE TABLE FREQUENCY RAISE
-                utils.CurrentFrequency.get_instance().update(40);
+                # utils.CurrentFrequency.get_instance().update(20);
                 ###########################
 
             except RoutineException as exception:
@@ -111,12 +130,22 @@ class ActiveExperiment:
         return cls.instance
 
     def __init__(self):
-        self.experiments = {}
+        self.experiments = []
+
+    def check(self, experiment_id):
+        return experiment_id in self.experiments
 
     def get(self, experiment_id):
-        if experiment_id in self.experiments:
+        if self.check(experiment_id):
             return False
         else:
-            self.experiments[experiment_id] = True
+            self.experiments.append(experiment_id)
             return True
 
+    def remove(self, experiment_id):
+        if self.check(experiment_id):
+            self.experiments.remove(experiment_id)
+
+    @classmethod
+    def clean(cls):
+        cls.instance = None
