@@ -1,7 +1,7 @@
 from django.core.urlresolvers import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
-from .models import Sensor, Acceleration, Speed, Amplitude, Frequency
+from .models import Sensor, Acceleration, Frequency
 from .serializers import DataSerializer
 
 
@@ -13,10 +13,6 @@ class DataRestTest(APITestCase):
         )
         self.acceleration2 = Acceleration.objects.create(
             sensor=self.sensor1, value=987
-        )
-        self.speed = Speed.objects.create(sensor=self.sensor1, value=432)
-        self.amplitude = Amplitude.objects.create(
-            sensor=self.sensor1, value=123
         )
         self.frequency = Frequency.objects.create(
             sensor=self.sensor1, value=20

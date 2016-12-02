@@ -111,7 +111,7 @@ class ControlRestV1(APIView):
                 ########################### - USED TO SIMULATE THE TABLE FREQUENCY RAISE
 
                 ########################### - USED TO SIMULATE THE TABLE FREQUENCY RAISE
-                # utils.CurrentFrequency.get_instance().update(20);
+                # utils.CurrentFrequency.get_instance().update(30);
                 ###########################
 
             except RoutineException as exception:

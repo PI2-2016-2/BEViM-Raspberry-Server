@@ -180,25 +180,27 @@ class PiSerial:
                     print("Sensor number %s; Sensor axis %s" % (sensor_number, sensor_axis) )
                     axis_value = self.ser.read(protocol.SENSOR_BYTES_QUANTITY)
 
-                    # ENABLE THIS DIVISION IF USING ACCELEROMETER
-                    # axis_value = Bits(axis_value).int / protocol.SENSOR_LSB_RESOLUTION
-                    axis_value = Bits(axis_value).int
+                    print("\n\n\AXIS VALUE: " + str(axis_value) + "\n\n")
+                    if axis_value:
+                        # ENABLE THIS DIVISION IF USING ACCELEROMETER
+                        axis_value = Bits(axis_value).int / protocol.SENSOR_LSB_RESOLUTION
+                        # axis_value = Bits(axis_value).int
 
-                    sensor_number = str(sensor_number)
+                        sensor_number = str(sensor_number)
 
-                    if self.current_timestamp in self.sensors_data[sensor_number]:
-                        sensor_data = self.sensors_data[sensor_number][self.current_timestamp]
-                    else:
-                        sensor_data = [sensor_number, -1, -1, -1, -1]
+                        if self.current_timestamp in self.sensors_data[sensor_number]:
+                            sensor_data = self.sensors_data[sensor_number][self.current_timestamp]
+                        else:
+                            sensor_data = [sensor_number, -1, -1, -1, -1]
 
-                    sensor_data[sensor_axis] = axis_value
+                        sensor_data[sensor_axis] = axis_value
 
-                    # The last position of the result list ([S!, 10, 10, 10, 123042]) is the timestamp
-                    sensor_data[-1] = self.current_timestamp
+                        # The last position of the result list ([S!, 10, 10, 10, 123042]) is the timestamp
+                        sensor_data[-1] = self.current_timestamp
 
-                    self.sensors_data[sensor_number][self.current_timestamp] = sensor_data
+                        self.sensors_data[sensor_number][self.current_timestamp] = sensor_data
 
-                    self.read_data.append(str(sensor_data) + '\n\n')
+                        self.read_data.append(str(sensor_data) + '\n\n')
 
                 else:
                     print("\n SENSOR BYTE WITH ERROR: Sensor number %s ; Axis %s \n" % (sensor_number, sensor_axis))
@@ -220,7 +222,7 @@ class PiSerial:
             # print(self.sensors_data)
             # print()
 
-            if self.current_timestamp > 4000:
+            if self.current_timestamp > 2000:
                 break
 
             if i is 1:
@@ -312,7 +314,7 @@ class CurrentFrequency:
         self.system_status = True
 
         # Used for simulation
-        # self.already_lauched = False
+        self.already_lauched = False
 
     def get(self):
         return (self.current_frequency, self.system_status)
@@ -322,6 +324,8 @@ class CurrentFrequency:
             print("Updating current frequency to %s Hz." % new_frequency)
             self.current_frequency = new_frequency
         self.system_status = system_status
+
+        # self.system_status = True # REMOVE THIS
         # self.__simulate_waiting_for_frequency(new_frequency)
 
     def __simulate_waiting_for_frequency(self, new_frequency):
@@ -422,7 +426,7 @@ def insert_command(data, begin_experiment_flag=False):
         print('Start experiment flag setted. Sending -1 to serial port...')
         piserial.data_input(protocol.START_EXPERIMENT_FLAG)
     time.sleep(0.1)
-    print('\nSending this data to serial port: ' + str(data))
+    print('\nSending this data to serial port: ' + str(data) + " - " + str(Bits(data).int))
     piserial.data_input(data)
     piserial.close_serialcom()
 
