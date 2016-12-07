@@ -15,7 +15,6 @@ class SensorRestV1(APIView):
 
     def get(self, request=None, format=None):
         sensors = Sensor.objects.all()
-        print(sensors)
         serializer = SensorSerializer(sensors, many=True)
         return Response(serializer.data)
 
@@ -25,24 +24,8 @@ class SensorRestV1(APIView):
         print('Exiting get_sensors_quantity() method')
         return self.get()
 
-
-class AccelerationRestV1(APIView):
-
-    def get(self, request, format=None):
-        accelerations = Acceleration.objects.all()
-        serializer = AccelerationSerializer(accelerations, many=True)
-        return Response(serializer.data)
-
-
 class FrequencyRestV1(APIView):
-
-    def get(self, request, format=None):
-        frequencies = Frequency.objects.all()
-        serializer = FrequencySerializer(frequencies, many=True)
-        return Response(serializer.data)
-
-    @classmethod
-    def get_current_frequency(cls, request):
+    def get(cls, request):
         current_frequency, system_status = utils.CurrentFrequency.get_instance().get()
         now = str(datetime.datetime.now().time())
         return HttpResponse(json.dumps({
@@ -73,7 +56,7 @@ class ControlRestV1(APIView):
         if ActiveExperiment.get_instance().check(experiment_id):
             # Sending signal to stop collecting data
 
-            # utils.SerialFacade.stop_experiment() # UNCOMMENT THIS - JUST FOR TEST WHILE THE SIMULATION IS NOT RIGHT
+            utils.SerialFacade.stop_experiment() # UNCOMMENT THIS - JUST FOR TEST WHILE THE SIMULATION IS NOT RIGHT
 
             # Clean the Current Frequency instance when experiment is over
             utils.CurrentFrequency.clean()
@@ -82,7 +65,7 @@ class ControlRestV1(APIView):
             ActiveExperiment.get_instance().remove(experiment_id)
             response = HttpResponse(status=200)
         else:
-            response = HttpResponseBadRequest("This experiment no longer active.")
+            response = HttpResponseBadRequest("This experiment is no longer active.")
         return response
 
 
