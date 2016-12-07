@@ -4,6 +4,7 @@ from rest_framework.test import APITestCase
 from unittest.mock import patch
 from .models import Sensor, Acceleration, Frequency
 from .serializers import AccelerationSerializer
+from .utils import Parser
 
 import json
 
@@ -120,3 +121,29 @@ class DataRestTest(APITestCase):
         data = {'experiment': 1, 'forced_stop': False}
         response = self.client.put(url, data, format='json')
         self.assertEqual(response.status_code, 400)
+
+
+class TestParserUtils(APITestCase):
+
+    def test_if_insert_sensors(self):
+        sensors = ['1', '2', '3', '4']
+        Parser().inserting_sensors(sensors)
+
+        inserted_sensors = Sensor.objects.all()
+        
+        self.assertEqual(sensors[0], inserted_sensors[0].name)
+
+    def test_if_get_job_elapsed_time(self):
+        jobs_time = {'1': {'time': 1}, '2': {'time': 2}}
+        result_time = Parser().get_job_elapsed_time(jobs_time, 2)
+        expected_time = 3000
+        
+        self.assertEqual(result_time, expected_time)
+
+
+    def test_if_add_jobs_ids(self):
+        data = [['1', '2.00', '2.00', '2.00', '0.00'], ['2', '2.00', '2.00', '2.00', '0.01']]
+        jobs = {'jobs': {'1': {'time': 1, 'job_pk': 1}}}
+        result = Parser().add_jobs_ids(data, jobs)
+
+        self.assertEqual(result[0][5], jobs['jobs']['1']['job_pk'])

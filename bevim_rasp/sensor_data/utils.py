@@ -58,38 +58,6 @@ class Parser:
                         break
         return data
 
-    def creating_data_tuple(self, lines):
-        brute_data = []
-        sensor_data_pattern = protocol.get_sensor_data_pattern()
-        for line in lines:
-            try:
-                sensor_data = sensor_data_pattern.match(line)
-                if sensor_data:
-                    brute_data.append(list(sensor_data.groups()))
-                else:
-                    print("Line readed with problem: '" + str(line) + "'")
-            except Exception as e:
-                print(e)
-
-        return brute_data
-
-
-    def inserting_acceleration(self, accelerations):
-        from datetime import datetime
-        time = datetime.now().time()
-        print('Time that stopped reading: ' + str(time))
-        print('Inserting accelerations...')
-        data_tuple = []
-        for acceleration in accelerations:
-            sensor = models.Sensor.objects.get(name=acceleration[0])
-            acceleration[0] = str(sensor.pk)
-            data_tuple.append(tuple(acceleration))
-
-        query = ("INSERT INTO sensor_data_acceleration (sensor_id, x_value, y_value, z_value, timestamp_ref, job_id) VALUES (%s,%s,%s,%s,%s,%s);")
-        DatabaseUtils.execute_query("START TRANSACTION;")
-        DatabaseUtils.execute_query(query, data_tuple)
-        time = datetime.now().time()
-        print ("Acceleration data insertion finished in: " + str(time))
 
 class PiSerial:
 
@@ -268,14 +236,12 @@ class Routine:
             parser = Parser()
             sensor_data_with_job_ids = parser.add_jobs_ids(sensors_data, jobs_info)
 
-            print ("Getting data tuple")
             print(len(sensor_data_with_job_ids))
 
             send_accelerations(json.dumps({
                 'sensors': sensor_data_with_job_ids,
                 'frequencies': data['frequencies']
             }))
-
 
 class CurrentFrequency:
 
@@ -413,18 +379,3 @@ def send_accelerations(data):
     headers = {'content-type': 'application/json'}
     response = requests.put(application_url, data=data, headers=headers)
     print (response)
-
-
-class DatabaseUtils:
-
-    def execute_query(query, data_tuple=False):
-        with connection.cursor() as cursor:
-            try:
-                if data_tuple:
-                    cursor.executemany(query, data_tuple)
-                else:
-                    cursor.execute(query)
-                connection.commit()
-            except:
-                raise IntegrityError
-
