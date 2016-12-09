@@ -150,8 +150,8 @@ class PiSerial:
                     print("\n\n\AXIS VALUE: " + str(axis_value) + "\n\n")
                     if axis_value:
                         # ENABLE THIS DIVISION IF USING ACCELEROMETER
-                        axis_value = Bits(axis_value).int / protocol.SENSOR_LSB_RESOLUTION
-                        # axis_value = Bits(axis_value).int
+                        #axis_value = Bits(axis_value).int / protocol.SENSOR_LSB_RESOLUTION
+                        axis_value = Bits(axis_value).int
 
                         sensor_number = str(sensor_number)
 
@@ -181,7 +181,7 @@ class PiSerial:
             except serial.SerialException as e:
                 raise RoutineException(250, aditional_exception=e)
 
-            if self.current_timestamp > 4000:
+            if self.current_timestamp > 5000:
                 break
 
             if i is 1:
