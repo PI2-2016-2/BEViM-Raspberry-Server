@@ -5,6 +5,7 @@ from unittest.mock import patch
 from .models import Sensor, Acceleration, Frequency
 from .serializers import AccelerationSerializer
 from .utils import Parser
+from . import protocol
 
 import json
 
@@ -147,3 +148,14 @@ class TestParserUtils(APITestCase):
         result = Parser().add_jobs_ids(data, jobs)
 
         self.assertEqual(result[0][5], jobs['jobs']['1']['job_pk'])
+
+
+class TestProtocol(APITestCase):
+
+    def test_if_validate_sensor_with_a_valid_axis_and_number(self):
+        valid = protocol.validate_sensor_number_and_axis(1, 1) # Sensor 1, eixo x
+        self.assertTrue(valid)
+
+    def test_if_validate_sensor_with_a_invalid_axis_and_number(self):
+        valid = protocol.validate_sensor_number_and_axis(1, 4) # Sensor 1, eixo x
+        self.assertFalse(valid)
