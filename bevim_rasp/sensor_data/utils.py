@@ -109,6 +109,7 @@ class PiSerial:
     def initialize_collect_sensors_variables(self):
         for sensor in models.Sensor.objects.all():
             self.sensors_data[sensor.name] = {}
+        self.frequencies = {}
 
     def open_serialcom(self):
         try:
@@ -130,7 +131,8 @@ class PiSerial:
         while True:
             sensors = self.ser.read()
             print(str(i) + " Read sensors: " + str(sensors))
-            if sensors:
+
+            if sensors or i is 10:
                 break
 
             if i is 1: # Waiting 2 loops to set the thread started
@@ -154,8 +156,6 @@ class PiSerial:
 
             header = BitArray(header)
 
-            self.read_data.append(str(header.bin) + '\n')
-
             if header.uint is protocol.TIMESTAMP_HEADER:
                 print("TIMESTAMP HEADER")
                 timestamp = self.ser.read(protocol.TIMESTAMP_BYTES_QUANTITY)
@@ -163,14 +163,13 @@ class PiSerial:
                 timestamp = BitArray(timestamp).uint
                 self.current_timestamp = timestamp
 
-                self.read_data.append(str(timestamp) + '\n')
-
                 print("TIMESTAMP VALUE %s " % self.current_timestamp)
             elif header.uint is protocol.FREQUENCY_FLAG_HEADER:
                 print("FREQUENCY REACHED HEADER")
                 frequency_in_bytes = self.ser.read(protocol.FREQUENCY_BYTES_QUANTITY)
                 frequency = BitArray(frequency_in_bytes).uint
                 CurrentFrequency.get_instance().update(frequency, system_status=True)
+                self.frequencies[str(self.current_timestamp)] = frequency
             else:
                 print("SENSOR HEADER")
                 sensor_number = header[0:4].uint
@@ -200,8 +199,6 @@ class PiSerial:
 
                         self.sensors_data[sensor_number][self.current_timestamp] = sensor_data
 
-                        self.read_data.append(str(sensor_data) + '\n\n')
-
                 else:
                     print("\n SENSOR BYTE WITH ERROR: Sensor number %s ; Axis %s \n" % (sensor_number, sensor_axis))
                     time.sleep(3)
@@ -209,37 +206,26 @@ class PiSerial:
 
     def data_output_list(self, notify_obj=None):
 
-        self.read_data = []
-
         i = 0
         while True:
-
             try:
                 self.read_sensor_data()
             except serial.SerialException as e:
                 raise RoutineException(250, aditional_exception=e)
 
-            # print(self.sensors_data)
-            # print()
-
-            if self.current_timestamp > 2000:
+            if self.current_timestamp > 4000:
                 break
 
             if i is 1:
                 if notify_obj:
                     notify_obj.notify_started()
                     notify_obj = None
-
-            # if i is 500:
-            #     break
-            # print(i)
-
             i += 1
 
-        # SAVING IN THE FILE TO SEE - REMOVE THIS
-        with open ('read_data', 'a') as f: [f.write(d) for d in self.read_data]
-
-        return self.sensors_data
+        return {
+            'sensors': self.sensors_data,
+            'frequencies': self.frequencies
+        }
 
     def data_input(self, data):
         self.bytes_writen = self.ser.write(data)
@@ -274,30 +260,22 @@ class Routine:
             # Communicate that system is down
             CurrentFrequency.get_instance().update(system_status=False)
         else:
-            # print ("JSON DUMPS -------------------------------: \n\n\n\n")
-            # print(json.dumps(data))
-
             sensors_data = []
-            for data_list in data.values():
+            for data_list in data['sensors'].values():
                 for sensor_data in data_list.values():
                     sensors_data.append(sensor_data)
 
-            # print("\ndata_list\n")
-            # print(sensors_data)
-
-            print("Getting data with jobs")
             parser = Parser()
-            data_with_job_ids = parser.add_jobs_ids(sensors_data, jobs_info)
-
-            # print("\nDATA WITH JOB IDS\n")
-            # print(data_with_job_ids)
+            sensor_data_with_job_ids = parser.add_jobs_ids(sensors_data, jobs_info)
 
             print ("Getting data tuple")
-            print(len(data_with_job_ids))
-            send_accelerations(json.dumps(data_with_job_ids))
-            print ("JSON DUMPS: ")
-            print(json.dumps(data_with_job_ids))
-            #parser.inserting_acceleration(data_with_job_ids)
+            print(len(sensor_data_with_job_ids))
+
+            send_accelerations(json.dumps({
+                'sensors': sensor_data_with_job_ids,
+                'frequencies': data['frequencies']
+            }))
+
 
 class CurrentFrequency:
 
